@@ -94,7 +94,7 @@ func format_event(ev *evdev.InputEvent) string {
 	return res
 }
 
-func main() {
+func Demo() {
 	var dev *evdev.InputDevice
 	var events []evdev.InputEvent
 	var err error
@@ -128,12 +128,12 @@ func main() {
 	fmt.Printf("Repeat settings: repeat %d. delay %d\n", repeat_info[0], repeat_info[1])
 	fmt.Printf("Device capabilities:\n")
 
-	// for ctype, codes := range dev.Capabilities {
-	// 	fmt.Printf("  Type %s %d\n", ctype.Name, ctype.Type)
-	// 	for i := range codes {
-	// 		fmt.Printf("   Code %d %s\n", codes[i].Code, codes[i].Name)
-	// 	}
-	// }
+	for ctype, codes := range dev.Capabilities {
+		fmt.Printf("  Type %s %d\n", ctype.Name, ctype.Type)
+		for i := range codes {
+			fmt.Printf("   Code %d %s\n", codes[i].Code, codes[i].Name)
+		}
+	}
 
 	fmt.Printf("Listening for events ...\n")
 
@@ -150,15 +150,13 @@ func main() {
 	}
 }
 
-// print('Device capabilities:')
-// for type, codes in device.capabilities(verbose=True).items():
-//     print('  Type {} {}:'.format(*type))
-//     for i in codes:
-//         if isinstance(i[1], AbsInfo):
-//             print('    Code {:<4} {}:'.format(*i[0]))
-//             print('      {}'.format(i[1]))
-//         else:
-//             print('    Code {:<4} {}'.format(*i))
-//     print('')
-//
-//
+func main() {
+	m, err := NewWithSelect()
+	if err != nil {
+		panic(err)
+	}
+	err = m.worker()
+	if err != nil {
+		panic(err)
+	}
+}
