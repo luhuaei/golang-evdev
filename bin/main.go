@@ -1,4 +1,3 @@
-// +build linux
 // Input device event monitor.
 package main
 
@@ -7,8 +6,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
-	evdev "github.com/gvalkov/golang-evdev"
+	"evdev"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 )
 
 // Select a device from a list of accessible input devices.
-func select_device() (*evdev.InputDevice, error) {
+func selectDevice() (*evdev.InputDevice, error) {
 	devices, _ := evdev.ListInputDevices(device_glob)
 
 	lines := make([]string, 0)
@@ -52,7 +52,7 @@ func select_device() (*evdev.InputDevice, error) {
 	return nil, errors.New(errmsg)
 }
 
-func format_event(ev *evdev.InputEvent) string {
+func formatEvent(ev *evdev.InputEvent) string {
 	var res, f, code_name string
 
 	code := int(ev.Code)
@@ -101,7 +101,7 @@ func Demo() {
 
 	switch len(os.Args) {
 	case 1:
-		dev, err = select_device()
+		dev, err = selectDevice()
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -144,7 +144,7 @@ func Demo() {
 			os.Exit(1)
 		}
 		for i := range events {
-			str := format_event(&events[i])
+			str := formatEvent(&events[i])
 			fmt.Println(str)
 		}
 	}
@@ -155,6 +155,16 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	go func() {
+		<-time.After(time.Second * 15)
+		err := m.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+		os.Exit(0)
+	}()
+
 	err = m.worker()
 	if err != nil {
 		panic(err)

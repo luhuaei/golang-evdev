@@ -2,6 +2,8 @@ package evdev
 
 /*
  #include <linux/input.h>
+ #include <linux/uinput.h>
+ // wrap c macro function
  static int _EVIOCGNAME(int len) {return EVIOCGNAME(len);}
  static int _EVIOCGPHYS(int len) {return EVIOCGPHYS(len);}
  static int _EVIOCGUNIQ(int len) {return EVIOCGUNIQ(len);}
@@ -15,10 +17,14 @@ package evdev
  static int _EVIOCGBIT(int ev, int len) {return EVIOCGBIT(ev, len);}
  static int _EVIOCGABS(int abs)    {return EVIOCGABS(abs);}
  static int _EVIOCSABS(int abs)    {return EVIOCSABS(abs);}
+
+ static int _UI_GET_SYSNAME(int len) { return UI_GET_SYSNAME(len);}
 */
 import "C"
-import "syscall"
-import "unsafe"
+import (
+	"syscall"
+	"unsafe"
+)
 
 type _InputEvent C.struct_input_event
 type _InputAbsinfo C.struct_input_absinfo
@@ -63,9 +69,38 @@ var EVIOCGLED = C._EVIOCGLED(MAX_NAME_SIZE) // get all LEDs
 var EVIOCGSND = C._EVIOCGSND(MAX_NAME_SIZE) // get all sounds status
 var EVIOCGSW = C._EVIOCGSW(MAX_NAME_SIZE)   // get all switch states
 
-func EVIOCGBIT(ev, l int) int { return int(C._EVIOCGBIT(C.int(ev), C.int(l))) } // get event bits
+func EVIOCGBIT(ev, l int) int { return int(C._EVIOCGBIT(C.int(ev), C.int(l))) } // get event bitsb
 func EVIOCGABS(abs int) int   { return int(C._EVIOCGABS(C.int(abs))) }          // get abs bits
 func EVIOCSABS(abs int) int   { return int(C._EVIOCSABS(C.int(abs))) }          // set abs bits
+
+// uinput
+
+const (
+	UI_DEV_CREATE  = C.UI_DEV_CREATE  // create device
+	UI_DEV_DESTROY = C.UI_DEV_DESTROY // destroy device
+
+	UI_DEV_SETUP = C.UI_DEV_SETUP // setup device
+	UI_ABS_SETUP = C.UI_ABS_SETUP //
+
+	UI_SET_EVBIT   = C.UI_SET_EVBIT
+	UI_SET_KEYBIT  = C.UI_SET_KEYBIT
+	UI_SET_RELBIT  = C.UI_SET_RELBIT
+	UI_SET_ABSBIT  = C.UI_SET_ABSBIT
+	UI_SET_MSCBIT  = C.UI_SET_MSCBIT
+	UI_SET_LEDBIT  = C.UI_SET_LEDBIT
+	UI_SET_SNDBIT  = C.UI_SET_SNDBIT
+	UI_SET_FFBIT   = C.UI_SET_FFBIT
+	UI_SET_PHYS    = C.UI_SET_PHYS
+	UI_SET_SWBIT   = C.UI_SET_SWBIT
+	UI_SET_PROPBIT = C.UI_SET_PROPBIT
+	UI_GET_VERSION = C.UI_GET_VERSION
+)
+
+var UI_GET_SYSNAME = C._UI_GET_SYSNAME(MAX_NAME_SIZE)
+
+type _Uinput_setup = C.struct_uinput_setup
+
+const uinput_name_len = 80
 
 func ioctl(fd uintptr, name uintptr, data unsafe.Pointer) syscall.Errno {
 	_, _, err := syscall.RawSyscall(syscall.SYS_IOCTL, fd, name, uintptr(data))

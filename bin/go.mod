@@ -1,7 +1,7 @@
-module bin
+module main
 
 go 1.16
 
-replace github.com/gvalkov/golang-evdev => ../
+replace evdev => ../
 
-require github.com/gvalkov/golang-evdev v0.0.0-20191114124502-287e62b94bcb
+require evdev v0.0.0-00010101000000-000000000000 // indirect

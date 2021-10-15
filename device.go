@@ -5,6 +5,7 @@ package evdev
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -342,4 +343,135 @@ func ListInputDevices(device_glob_arg ...string) ([]*InputDevice, error) {
 func bytes_to_string(b *[MAX_NAME_SIZE]byte) string {
 	idx := bytes.IndexByte(b[:], 0)
 	return string(b[:idx])
+}
+
+// output device
+
+// corresponse to uinput_setup struct
+type uinput_setup struct {
+	input_id device_info
+	name     [uinput_name_len]int8
+}
+
+type OutputDevice struct {
+	File  *os.File
+	setup *uinput_setup
+}
+
+func BindOutput() (*OutputDevice, error) {
+	f, err := os.OpenFile("/dev/uinput", syscall.O_WRONLY|syscall.O_NONBLOCK, 0666)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := ioctl(f.Fd(), uintptr(UI_SET_EVBIT), unsafe.Pointer(uintptr(EV_KEY))); err < 0 {
+		return nil, errors.New("Don't setting EVBIT")
+	}
+
+	// register all key code
+	for i := range KEY {
+		if err := ioctl(f.Fd(), uintptr(UI_SET_KEYBIT), unsafe.Pointer(&i)); err < 0 {
+			return nil, fmt.Errorf("Don't setting KEYBIT for %d\n", i)
+		}
+	}
+
+	setup := uinput_setup{
+		input_id: device_info{
+			bustype: BUS_USB,
+			vendor:  0x1234,
+			product: 0x5678,
+		},
+		name: string_to_bytes("uinput"),
+	}
+	if err := ioctl(f.Fd(), uintptr(UI_DEV_SETUP), unsafe.Pointer(&setup)); err < 0 {
+		return nil, errors.New("Don't setting UI_DEV_SETUP")
+	}
+
+	if err := ioctl(f.Fd(), uintptr(UI_DEV_CREATE), unsafe.Pointer(nil)); err < 0 {
+		return nil, errors.New("Don't setting UI_DEV_CREATE")
+	}
+
+	return &OutputDevice{
+		File:  f,
+		setup: &setup,
+	}, nil
+}
+
+func (device *OutputDevice) Emit(e InputEvent) error {
+	b, err := device.eventToBytes(e)
+	if err != nil {
+		return err
+	}
+
+	_, err = device.File.Write(b)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (device *OutputDevice) Emits(es []InputEvent) error {
+	for _, e := range es {
+		err := device.Emit(e)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (device *OutputDevice) EmitSYN() error {
+	return device.Emit(InputEvent{
+		Type:  EV_SYN,
+		Code:  SYN_REPORT,
+		Value: 0,
+	})
+}
+
+func (device *OutputDevice) EmitKey(key uint16, isPress bool) error {
+	val := int32(0)
+	if isPress {
+		val = int32(1)
+	}
+	err := device.Emit(InputEvent{
+		Type:  EV_KEY,
+		Code:  key,
+		Value: val,
+	})
+	if err != nil {
+		return err
+	}
+	return device.EmitSYN()
+}
+
+func (device *OutputDevice) Close() error {
+	if err := ioctl(device.File.Fd(), uintptr(UI_DEV_DESTROY), unsafe.Pointer(nil)); err < 0 {
+		return errors.New("Destrory Uinput failed.")
+	}
+	return device.File.Close()
+}
+
+func (device *OutputDevice) eventToBytes(e InputEvent) ([]byte, error) {
+	buffer := make([]byte, eventsize)
+	err := binary.Write(bytes.NewBuffer(buffer), binary.LittleEndian, &e)
+	if err != nil {
+		return nil, err
+	}
+	return buffer, nil
+}
+
+func string_to_bytes(s string) [uinput_name_len]int8 {
+	b := []byte(s)
+
+	if len(b) > uinput_name_len {
+		b = b[:uinput_name_len]
+	}
+
+	var arr [uinput_name_len]int8
+
+	for i, _b := range b {
+		arr[i] = int8(_b)
+	}
+
+	return arr
 }

@@ -4,25 +4,33 @@ import (
 	"context"
 	"fmt"
 
-	evdev "github.com/gvalkov/golang-evdev"
+	"evdev"
 )
 
 type manager struct {
 	touchpad *evdev.InputDevice
 	keyboard *evdev.InputDevice
 
+	output *evdev.OutputDevice
+
 	isTouch bool
 }
 
 func NewWithSelect() (*manager, error) {
+	output, err := evdev.BindOutput()
+	if err != nil {
+		fmt.Println("ERR", err)
+		return nil, err
+	}
+
 	fmt.Println("Select Your touchpad device...")
-	touchpad, err := select_device()
+	touchpad, err := selectDevice()
 	if err != nil {
 		return nil, err
 	}
 
 	fmt.Println("Select Your keyboard device...")
-	keyboard, err := select_device()
+	keyboard, err := selectDevice()
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +38,22 @@ func NewWithSelect() (*manager, error) {
 	return &manager{
 		touchpad: touchpad,
 		keyboard: keyboard,
+		output:   output,
 	}, nil
+}
+
+func (m *manager) Close() error {
+	err := m.keyboard.File.Close()
+	if err != nil {
+		return err
+	}
+
+	err = m.touchpad.File.Close()
+	if err != nil {
+		return err
+	}
+
+	return m.output.Close()
 }
 
 func (m *manager) worker() error {
@@ -99,14 +122,15 @@ func (m *manager) keyboardWorker(ctx context.Context) error {
 			}
 
 			if !m.isTouch {
+				err = m.output.Emits(es)
+				if err != nil {
+					return err
+				}
 				continue
 			}
 
 			evfmt := "time %d.%-8d type %d (%s), code %-3d (%s), value %d\n"
 			for _, ev := range es {
-				if ev.Type != evdev.EV_KEY {
-					continue
-				}
 
 				var key string
 				var ok bool
@@ -119,6 +143,28 @@ func (m *manager) keyboardWorker(ctx context.Context) error {
 				}
 				fmt.Printf(evfmt, ev.Time.Sec, ev.Time.Usec, ev.Type,
 					evdev.EV[int(ev.Type)], ev.Code, key, ev.Value)
+
+				if ev.Type != evdev.EV_KEY || ev.Code == evdev.KEY_LEFTCTRL {
+					err = m.output.Emit(ev)
+					if err != nil {
+						return err
+					}
+					continue
+				}
+
+				err = m.output.EmitKey(evdev.KEY_LEFTCTRL, true)
+				if err != nil {
+					return err
+				}
+				err = m.output.Emit(ev)
+				if err != nil {
+					return err
+				}
+
+				err = m.output.EmitKey(evdev.KEY_LEFTCTRL, false)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
